@@ -1,4 +1,4 @@
-module gobase
+module github.com/Ypirate/gobase
 
 go 1.25
 
