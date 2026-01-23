@@ -12,8 +12,10 @@ import (
 )
 
 type LogConfig struct {
-	Level  string `yaml:"level" json:"level"`   // log level: debug/info/warn/error/dpanic/panic/fatal
-	Stdout bool   `yaml:"stdout" json:"stdout"` // whether to output to standard output
+	Level       string `yaml:"level" json:"level"`   // log level: debug/info/warn/error/dpanic/panic/fatal
+	Stdout      bool   `yaml:"stdout" json:"stdout"` // whether to output to standard output
+	LogDir      string `yaml:"logDir" json:"logDir"`
+	LogFileName string `yaml:"logFile" json:"logFile"`
 }
 
 var (
@@ -54,10 +56,15 @@ func InitLog(conf LogConfig) {
 			cores = append(cores, core)
 		} else {
 			// when running for the first time, a directory needs to be created  ./logs/app.log
-			logDir := "./logs" //TODO obtain configuration from caller projects
-			if err := os.MkdirAll(logDir, 0755); err != nil {
+			if conf.LogDir == "" {
+				conf.LogDir = "./logs"
+			}
+			if conf.LogFileName == "" {
+				conf.LogFileName = "app.log"
+			}
+			if err := os.MkdirAll(conf.LogDir, 0755); err != nil {
 				// If directory creation fails, fallback to stderr
-				fmt.Fprintf(os.Stderr, "failed to create log dir %s: %v\n", logDir, err)
+				fmt.Fprintf(os.Stderr, "failed to create log dir %s: %v\n", conf.LogDir, err)
 				core := zapcore.NewCore(
 					jsonEncoder,
 					zapcore.Lock(os.Stderr),
@@ -65,7 +72,7 @@ func InitLog(conf LogConfig) {
 				)
 				cores = append(cores, core)
 			} else {
-				logFile := filepath.Join(logDir, "app.log") //TODO obtain configuration from caller projects or ctx
+				logFile := filepath.Join(conf.LogDir, conf.LogFileName)
 				lumberjackLogger := &lumberjack.Logger{
 					Filename:   logFile,
 					MaxSize:    100, // MB
