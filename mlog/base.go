@@ -54,39 +54,38 @@ func InitLog(conf LogConfig) {
 				level,
 			)
 			cores = append(cores, core)
+		}
+		// when running for the first time, a directory needs to be created  ./logs/app.log
+		if conf.LogDir == "" {
+			conf.LogDir = "./logs"
+		}
+		if conf.LogFileName == "" {
+			conf.LogFileName = "app.log"
+		}
+		if err := os.MkdirAll(conf.LogDir, 0755); err != nil {
+			// If directory creation fails, fallback to stderr
+			fmt.Fprintf(os.Stderr, "failed to create log dir %s: %v\n", conf.LogDir, err)
+			core := zapcore.NewCore(
+				jsonEncoder,
+				zapcore.Lock(os.Stderr),
+				level,
+			)
+			cores = append(cores, core)
 		} else {
-			// when running for the first time, a directory needs to be created  ./logs/app.log
-			if conf.LogDir == "" {
-				conf.LogDir = "./logs"
+			logFile := filepath.Join(conf.LogDir, conf.LogFileName)
+			lumberjackLogger := &lumberjack.Logger{
+				Filename:   logFile,
+				MaxSize:    100, // MB
+				MaxBackups: 5,
+				MaxAge:     7, // days
+				Compress:   true,
 			}
-			if conf.LogFileName == "" {
-				conf.LogFileName = "app.log"
-			}
-			if err := os.MkdirAll(conf.LogDir, 0755); err != nil {
-				// If directory creation fails, fallback to stderr
-				fmt.Fprintf(os.Stderr, "failed to create log dir %s: %v\n", conf.LogDir, err)
-				core := zapcore.NewCore(
-					jsonEncoder,
-					zapcore.Lock(os.Stderr),
-					level,
-				)
-				cores = append(cores, core)
-			} else {
-				logFile := filepath.Join(conf.LogDir, conf.LogFileName)
-				lumberjackLogger := &lumberjack.Logger{
-					Filename:   logFile,
-					MaxSize:    100, // MB
-					MaxBackups: 5,
-					MaxAge:     7, // days
-					Compress:   true,
-				}
-				core := zapcore.NewCore(
-					jsonEncoder,
-					zapcore.AddSync(lumberjackLogger),
-					level,
-				)
-				cores = append(cores, core)
-			}
+			core := zapcore.NewCore(
+				jsonEncoder,
+				zapcore.AddSync(lumberjackLogger),
+				level,
+			)
+			cores = append(cores, core)
 		}
 
 		// merge cores
