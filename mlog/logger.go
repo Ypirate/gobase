@@ -33,9 +33,13 @@ func logWithCtx(ctx *gin.Context, level zapcore.Level, format string, args ...in
 		fmt.Fprintf(os.Stderr, "[UNINIT] %s\n", fmt.Sprintf(format, args...))
 		return
 	}
-	ct := ctx.Request.Context()
 
-	fields := extractFieldsFromContext(ct)
+	var fields = []zap.Field{}
+	if ctx != nil {
+		ct := ctx.Request.Context()
+		fields = extractFieldsFromContext(ct)
+	}
+
 	msg := fmt.Sprintf(format, args...)
 
 	switch level {
