@@ -6,28 +6,27 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func Errorf(ctx *gin.Context, format string, args ...interface{}) {
+func Errorf(ctx context.Context, format string, args ...interface{}) {
 	logWithCtx(ctx, zapcore.ErrorLevel, format, args...)
 }
 
-func Warnf(ctx *gin.Context, format string, args ...interface{}) {
+func Warnf(ctx context.Context, format string, args ...interface{}) {
 	logWithCtx(ctx, zapcore.WarnLevel, format, args...)
 }
 
-func Infof(ctx *gin.Context, format string, args ...interface{}) {
+func Infof(ctx context.Context, format string, args ...interface{}) {
 	logWithCtx(ctx, zapcore.InfoLevel, format, args...)
 }
 
-func Debugf(ctx *gin.Context, format string, args ...interface{}) {
+func Debugf(ctx context.Context, format string, args ...interface{}) {
 	logWithCtx(ctx, zapcore.DebugLevel, format, args...)
 }
 
-func logWithCtx(ctx *gin.Context, level zapcore.Level, format string, args ...interface{}) {
+func logWithCtx(ctx context.Context, level zapcore.Level, format string, args ...interface{}) {
 	if logger == nil {
 		// fallback
 		fmt.Fprintf(os.Stderr, "[UNINIT] %s\n", fmt.Sprintf(format, args...))
@@ -35,10 +34,7 @@ func logWithCtx(ctx *gin.Context, level zapcore.Level, format string, args ...in
 	}
 
 	var fields = []zap.Field{}
-	if ctx != nil {
-		ct := ctx.Request.Context()
-		fields = extractFieldsFromContext(ct)
-	}
+	fields = extractFieldsFromContext(ctx)
 
 	msg := fmt.Sprintf(format, args...)
 
