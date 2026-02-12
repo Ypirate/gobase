@@ -38,7 +38,7 @@ func InitLog(conf LogConfig) {
 			StacktraceKey:  "stacktrace",
 			LineEnding:     zapcore.DefaultLineEnding,
 			EncodeLevel:    zapcore.LowercaseLevelEncoder,
-			EncodeTime:     zapcore.RFC3339TimeEncoder,
+			EncodeTime:     zapcore.RFC3339NanoTimeEncoder,
 			EncodeDuration: zapcore.SecondsDurationEncoder,
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 		}
@@ -100,3 +100,5 @@ func CloseLogger() {
 		_ = logger.Sync()
 	}
 }
+
+const maxLogMessageLength = 4096

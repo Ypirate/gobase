@@ -5,25 +5,41 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func Errorf(ctx context.Context, format string, args ...interface{}) {
-	logWithCtx(ctx, zapcore.ErrorLevel, format, args...)
+func Errorf(ctx any, format string, args ...interface{}) {
+	logWithCtx(extractContext(ctx), zapcore.ErrorLevel, format, args...)
 }
 
-func Warnf(ctx context.Context, format string, args ...interface{}) {
-	logWithCtx(ctx, zapcore.WarnLevel, format, args...)
+func Warnf(ctx any, format string, args ...interface{}) {
+	logWithCtx(extractContext(ctx), zapcore.WarnLevel, format, args...)
 }
 
-func Infof(ctx context.Context, format string, args ...interface{}) {
-	logWithCtx(ctx, zapcore.InfoLevel, format, args...)
+func Infof(ctx any, format string, args ...interface{}) {
+	logWithCtx(extractContext(ctx), zapcore.InfoLevel, format, args...)
 }
 
-func Debugf(ctx context.Context, format string, args ...interface{}) {
-	logWithCtx(ctx, zapcore.DebugLevel, format, args...)
+func Debugf(ctx any, format string, args ...interface{}) {
+	logWithCtx(extractContext(ctx), zapcore.DebugLevel, format, args...)
+}
+
+func extractContext(ctx any) context.Context {
+	if ctx == nil {
+		return nil
+	}
+	switch v := ctx.(type) {
+	case context.Context:
+		return v
+	case *gin.Context:
+		return v.Request.Context()
+	default:
+		return nil
+	}
 }
 
 func logWithCtx(ctx context.Context, level zapcore.Level, format string, args ...interface{}) {
@@ -32,11 +48,11 @@ func logWithCtx(ctx context.Context, level zapcore.Level, format string, args ..
 		fmt.Fprintf(os.Stderr, "[UNINIT] %s\n", fmt.Sprintf(format, args...))
 		return
 	}
+	msg := fmt.Sprintf(format, args...)
+	msg = truncateUTF8(msg, maxLogMessageLength)
 
 	var fields = []zap.Field{}
 	fields = extractFieldsFromContext(ctx)
-
-	msg := fmt.Sprintf(format, args...)
 
 	switch level {
 	case zapcore.DebugLevel:
@@ -62,29 +78,7 @@ func extractFieldsFromContext(ctx context.Context) []zap.Field {
 	}
 
 	var fields []zap.Field
-
-	// example: trace_id
-	if v := ctx.Value("trace_id"); v != nil {
-		if s, ok := v.(string); ok && s != "" {
-			fields = append(fields, zap.String("trace_id", s))
-		}
-	}
-
-	// example: request_id
-	if v := ctx.Value("request_id"); v != nil {
-		if s, ok := v.(string); ok && s != "" {
-			fields = append(fields, zap.String("request_id", s))
-		}
-	}
-
-	// example: user_id
-	if v := ctx.Value("user_id"); v != nil {
-		if s, ok := v.(string); ok && s != "" {
-			fields = append(fields, zap.String("user_id", s))
-		}
-	}
-
-	// TODO: extend other fields，example: tenant_id, app_name
+	fields = getFieldsFromContext(ctx)
 	return fields
 }
 
@@ -108,4 +102,17 @@ func parseLevel(levelStr string) zapcore.Level {
 	default:
 		return zapcore.InfoLevel
 	}
+}
+
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	// 找到不超过 maxBytes 的最大 rune 边界
+	for i := maxBytes; i >= 0; i-- {
+		if utf8.RuneStart(s[i]) {
+			return s[:i] + " ... [truncated]"
+		}
+	}
+	return s[:maxBytes] + " ... [truncated]" // fallback
 }
