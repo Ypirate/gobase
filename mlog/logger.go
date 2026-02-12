@@ -32,11 +32,12 @@ func extractContext(ctx any) context.Context {
 	if ctx == nil {
 		return nil
 	}
+
 	switch v := ctx.(type) {
-	case context.Context:
-		return v
 	case *gin.Context:
 		return v.Request.Context()
+	case context.Context:
+		return v
 	default:
 		return nil
 	}
