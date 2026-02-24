@@ -8,3 +8,7 @@ type Error struct {
 func (e Error) Error() string {
 	return e.Message
 }
+
+func (e *Error) ErrorF(msg string) {
+	e.Message = e.Message + ": " + msg
+}
