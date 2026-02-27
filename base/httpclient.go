@@ -111,7 +111,8 @@ func (c *Client) doRequest(ctx *gin.Context, method, path string, body io.Reader
 
 		req, err := http.NewRequestWithContext(ctx, method, url, body)
 		if err != nil {
-			return nil, err // 请求构造失败不重试
+			lastErr = err
+			return nil, err
 		}
 
 		// 设置通用 Header
@@ -185,11 +186,17 @@ func getTraceID(ctx *gin.Context) string {
 	if ctx == nil {
 		return ""
 	}
+	if traceID := ctx.GetString("trace_id"); traceID != "" {
+		return traceID
+	}
 	if traceID := ctx.GetString("Trace-Id"); traceID != "" {
 		return traceID
 	}
 	if ctx.Request != nil && ctx.Request.Context() != nil {
 		if traceID, ok := ctx.Request.Context().Value("Trace-Id").(string); ok {
+			return traceID
+		}
+		if traceID, ok := ctx.Request.Context().Value("trace_id").(string); ok {
 			return traceID
 		}
 	}
