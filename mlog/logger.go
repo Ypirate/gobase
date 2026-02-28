@@ -16,6 +16,10 @@ func Errorf(ctx any, format string, args ...interface{}) {
 	logWithCtx(extractContext(ctx), zapcore.ErrorLevel, format, args...)
 }
 
+func Fatalf(ctx any, format string, args ...interface{}) {
+	logWithCtx(extractContext(ctx), zapcore.FatalLevel, format, args...)
+}
+
 func Warnf(ctx any, format string, args ...interface{}) {
 	logWithCtx(extractContext(ctx), zapcore.WarnLevel, format, args...)
 }
