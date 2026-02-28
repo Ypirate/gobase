@@ -214,3 +214,201 @@ func TestTruncateUTF8(t *testing.T) {
 
 	t.Log("Truncate UTF8 test passed")
 }
+
+func TestFatalfTerminatesProgram(t *testing.T) {
+	var buf bytes.Buffer
+	gin.SetMode(gin.TestMode)
+
+	InitLog(LogConfig{
+		Level:  "debug",
+		Stdout: false,
+	})
+
+	w := zapcore.AddSync(&buf)
+	origLogger := logger
+	logger = zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+			TimeKey:        "ts",
+			LevelKey:       "level",
+			NameKey:        "logger",
+			CallerKey:      "caller",
+			MessageKey:     "msg",
+			StacktraceKey:  "stacktrace",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeTime:     zapcore.RFC3339TimeEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		}),
+		w,
+		zapcore.DebugLevel,
+	), zap.WithFatalHook(zapcore.WriteThenPanic))
+	defer func() { logger = origLogger }()
+
+	ctx := context.Background()
+
+	beforeCalled := false
+	afterCalled := false
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Logf("Fatalf triggered panic as expected (program terminated): %v", r)
+			}
+		}()
+		beforeCalled = true
+		Fatalf(ctx, "fatal error: %s", "test fatal message")
+		afterCalled = true
+	}()
+
+	output := buf.String()
+	if !strings.Contains(output, `"level":"fatal"`) {
+		t.Error("expected fatal level in output")
+	}
+	if !strings.Contains(output, "fatal error: test fatal message") {
+		t.Error("expected fatal message content in output")
+	}
+	if !beforeCalled {
+		t.Error("beforeCalled should be true")
+	}
+	if afterCalled {
+		t.Error("afterCalled should be false - Fatalf should terminate program")
+	}
+
+	t.Log("Fatalf terminates program test passed")
+}
+
+func TestFatalfWithContextFields(t *testing.T) {
+	var buf bytes.Buffer
+	gin.SetMode(gin.TestMode)
+
+	InitLog(LogConfig{
+		Level:  "debug",
+		Stdout: false,
+	})
+
+	w := zapcore.AddSync(&buf)
+	origLogger := logger
+	logger = zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+			TimeKey:        "ts",
+			LevelKey:       "level",
+			NameKey:        "logger",
+			CallerKey:      "caller",
+			MessageKey:     "msg",
+			StacktraceKey:  "stacktrace",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeTime:     zapcore.RFC3339TimeEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		}),
+		w,
+		zapcore.DebugLevel,
+	), zap.WithFatalHook(zapcore.WriteThenPanic))
+	defer func() { logger = origLogger }()
+
+	ctx := context.Background()
+	ctx = AddFields(ctx, zap.String("trace_id", "fatal-trace-123"), zap.String("user_id", "fatal-user-456"))
+
+	beforeCalled := false
+	afterCalled := false
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Logf("Fatalf triggered panic as expected: %v", r)
+			}
+		}()
+		beforeCalled = true
+		Fatalf(ctx, "critical failure: %s", "database connection lost")
+		afterCalled = true
+	}()
+
+	output := buf.String()
+	if !strings.Contains(output, `"level":"fatal"`) {
+		t.Error("expected fatal level in output")
+	}
+	if !strings.Contains(output, "fatal-trace-123") {
+		t.Error("expected trace_id field in output")
+	}
+	if !strings.Contains(output, "fatal-user-456") {
+		t.Error("expected user_id field in output")
+	}
+	if !strings.Contains(output, "critical failure: database connection lost") {
+		t.Error("expected message content in output")
+	}
+	if !beforeCalled {
+		t.Error("beforeCalled should be true")
+	}
+	if afterCalled {
+		t.Error("afterCalled should be false - Fatalf should terminate program")
+	}
+
+	t.Log("Fatalf with context fields test passed")
+}
+
+func TestFatalfWithGinContext(t *testing.T) {
+	var buf bytes.Buffer
+	gin.SetMode(gin.TestMode)
+
+	InitLog(LogConfig{
+		Level:  "debug",
+		Stdout: false,
+	})
+
+	w := zapcore.AddSync(&buf)
+	origLogger := logger
+	logger = zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+			TimeKey:        "ts",
+			LevelKey:       "level",
+			NameKey:        "logger",
+			CallerKey:      "caller",
+			MessageKey:     "msg",
+			StacktraceKey:  "stacktrace",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeTime:     zapcore.RFC3339TimeEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		}),
+		w,
+		zapcore.DebugLevel,
+	), zap.WithFatalHook(zapcore.WriteThenPanic))
+	defer func() { logger = origLogger }()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/test-fatal", func(c *gin.Context) {
+		GinAddString(c, "trace_id", "gin-fatal-trace-999")
+
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Logf("Fatalf triggered panic as expected: %v", r)
+				}
+			}()
+			Fatalf(c, "fatal: service unavailable")
+		}()
+
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/test-fatal", nil)
+	wr := httptest.NewRecorder()
+	router.ServeHTTP(wr, req)
+
+	output := buf.String()
+	if !strings.Contains(output, `"level":"fatal"`) {
+		t.Error("expected fatal level in output")
+	}
+	if !strings.Contains(output, "gin-fatal-trace-999") {
+		t.Error("expected trace_id from gin context in output")
+	}
+	if !strings.Contains(output, "fatal: service unavailable") {
+		t.Error("expected message content in output")
+	}
+
+	t.Log("Fatalf with gin context test passed")
+}
