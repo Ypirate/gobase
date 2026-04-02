@@ -7,71 +7,79 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func Errorf(ctx any, format string, args ...interface{}) {
-	logWithCtx(extractContext(ctx), zapcore.ErrorLevel, format, args...)
+func Errorf(ctx context.Context, format string, args ...interface{}) {
+	logWithCtx(ctx, zapcore.ErrorLevel, format, args...)
 }
 
-func Fatalf(ctx any, format string, args ...interface{}) {
-	logWithCtx(extractContext(ctx), zapcore.FatalLevel, format, args...)
+func Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logWithCtx(ctx, zapcore.FatalLevel, format, args...)
 }
 
-func Warnf(ctx any, format string, args ...interface{}) {
-	logWithCtx(extractContext(ctx), zapcore.WarnLevel, format, args...)
+func Panicf(ctx context.Context, format string, args ...interface{}) {
+	logWithCtx(ctx, zapcore.PanicLevel, format, args...)
 }
 
-func Infof(ctx any, format string, args ...interface{}) {
-	logWithCtx(extractContext(ctx), zapcore.InfoLevel, format, args...)
+func Warnf(ctx context.Context, format string, args ...interface{}) {
+	logWithCtx(ctx, zapcore.WarnLevel, format, args...)
 }
 
-func Debugf(ctx any, format string, args ...interface{}) {
-	logWithCtx(extractContext(ctx), zapcore.DebugLevel, format, args...)
+func Infof(ctx context.Context, format string, args ...interface{}) {
+	logWithCtx(ctx, zapcore.InfoLevel, format, args...)
 }
 
-func extractContext(ctx any) context.Context {
-	if ctx == nil {
-		return nil
-	}
+func Debugf(ctx context.Context, format string, args ...interface{}) {
+	logWithCtx(ctx, zapcore.DebugLevel, format, args...)
+}
 
-	switch v := ctx.(type) {
-	case *gin.Context:
-		return v.Request.Context()
-	case context.Context:
-		return v
-	default:
-		return nil
-	}
+// Info logs with structured fields (no formatting).
+func Info(ctx context.Context, msg string, fields ...zap.Field) {
+	logWithFields(ctx, zapcore.InfoLevel, nil, msg, fields...)
+}
+
+// Error logs with structured fields (no formatting).
+func Error(ctx context.Context, msg string, fields ...zap.Field) {
+	logWithFields(ctx, zapcore.ErrorLevel, nil, msg, fields...)
+}
+
+// Warn logs with structured fields (no formatting).
+func Warn(ctx context.Context, msg string, fields ...zap.Field) {
+	logWithFields(ctx, zapcore.WarnLevel, nil, msg, fields...)
+}
+
+// Debug logs with structured fields (no formatting).
+func Debug(ctx context.Context, msg string, fields ...zap.Field) {
+	logWithFields(ctx, zapcore.DebugLevel, nil, msg, fields...)
 }
 
 func logWithCtx(ctx context.Context, level zapcore.Level, format string, args ...interface{}) {
-	if logger == nil {
-		// fallback
+	l := getLogger()
+	if l == nil {
+		// fallback: logger not initialized
 		fmt.Fprintf(os.Stderr, "[UNINIT] %s\n", fmt.Sprintf(format, args...))
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
 	msg = truncateUTF8(msg, maxLogMessageLength)
 
-	var fields = []zap.Field{}
-	fields = extractFieldsFromContext(ctx)
+	fields := extractFieldsFromContext(ctx)
 
 	switch level {
 	case zapcore.DebugLevel:
-		logger.Debug(msg, fields...)
+		l.Debug(msg, fields...)
 	case zapcore.InfoLevel:
-		logger.Info(msg, fields...)
+		l.Info(msg, fields...)
 	case zapcore.WarnLevel:
-		logger.Warn(msg, fields...)
+		l.Warn(msg, fields...)
 	case zapcore.ErrorLevel:
-		logger.Error(msg, fields...)
+		l.Error(msg, fields...)
 	case zapcore.PanicLevel:
-		logger.Panic(msg, fields...)
+		l.Panic(msg, fields...)
 	case zapcore.FatalLevel:
-		logger.Fatal(msg, fields...)
+		l.Fatal(msg, fields...)
 	default:
 		panic("logger level unhandled default case")
 	}
@@ -81,10 +89,7 @@ func extractFieldsFromContext(ctx context.Context) []zap.Field {
 	if ctx == nil {
 		return nil
 	}
-
-	var fields []zap.Field
-	fields = getFieldsFromContext(ctx)
-	return fields
+	return getFieldsFromContext(ctx)
 }
 
 func parseLevel(levelStr string) zapcore.Level {
@@ -120,4 +125,22 @@ func truncateUTF8(s string, maxBytes int) string {
 		}
 	}
 	return s[:maxBytes] + " ... [truncated]" // fallback
+}
+
+// logWithFields logs with structured fields (used by Info/Error/Warn/Debug and child logger).
+func logWithFields(ctx context.Context, level zapcore.Level, fixedFields []zap.Field, msg string, additionalFields ...zap.Field) {
+	lg := getLogger()
+	if lg == nil {
+		fmt.Fprintf(os.Stderr, "[UNINIT] %s\n", msg)
+		return
+	}
+
+	msg = truncateUTF8(msg, maxLogMessageLength)
+
+	// Merge: fixed fields + context fields + additional fields
+	fields := fixedFields
+	fields = append(fields, extractFieldsFromContext(ctx)...)
+	fields = append(fields, additionalFields...)
+
+	lg.WithOptions(zap.AddCallerSkip(1)).Log(level, msg, fields...)
 }

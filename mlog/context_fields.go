@@ -3,7 +3,6 @@ package mlog
 import (
 	"context"
 
-	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
@@ -32,28 +31,4 @@ func getFieldsFromContext(ctx context.Context) []zap.Field {
 		}
 	}
 	return nil
-}
-
-// --- Gin Helpers ---
-
-// GinAddFields adds one or more zap.Field to gin.Context's underlying request context.
-func GinAddFields(c *gin.Context, fields ...zap.Field) {
-	ctx := c.Request.Context()
-	ctx = AddFields(ctx, fields...)
-	c.Request = c.Request.WithContext(ctx)
-}
-
-// GinAddString is a shortcut for adding a string field.
-func GinAddString(c *gin.Context, key, value string) {
-	GinAddFields(c, zap.String(key, value))
-}
-
-// GinAddInt is a shortcut for adding an int field.
-func GinAddInt(c *gin.Context, key string, value int) {
-	GinAddFields(c, zap.Int(key, value))
-}
-
-// GinAddBool is a shortcut for adding a bool field.
-func GinAddBool(c *gin.Context, key string, value bool) {
-	GinAddFields(c, zap.Bool(key, value))
 }
